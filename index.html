@@ -18,12 +18,6 @@
     z-index: 2;
   }
 
-  #face_canvas { 
-    position: static;
-    background: green;
-    z-index: 3;
-  }
-
   #threejs_canvas { 
     position: absolute;
     z-index: 2;
@@ -43,7 +37,6 @@
     <div class="container">
       <div class="canvas-wrapper">
           <canvas id="model_canvas"></canvas>
-          <!-- <canvas id="face_canvas"></canvas> -->
       </div>
       <div id="threejs_canvas"></div>
       <div class="video_block">
@@ -83,11 +76,12 @@ threejs_render.setSize(width, height);
 threejs_render.setClearColor( 0x000000, 0 );
 threejs_canvas.appendChild(threejs_render.domElement);
 
-let camera = new THREE.PerspectiveCamera(11.3, width / height);
-camera.position.set(150, -100, 1000);
+let camera = new THREE.PerspectiveCamera(11, width / height);
+camera.position.set(-150, -100, 1000);
 
 let material = new THREE.MeshBasicMaterial();
 let mesh = new THREE.Mesh(geometry,material);
+mesh.rotation.set(Math.PI,Math.PI,0);
 scene.add(mesh);
 
 loadImage();
@@ -96,16 +90,15 @@ tf.setBackend('wasm').then(() => main());
 function loadImage() {
 
   model_canvas = document.getElementById('model_canvas');
-
   model_canvas.width = videoWidth;
   model_canvas.height = videoHeight;
-  let ctx = model_canvas.getContext('2d');
+  let model_ctx = model_canvas.getContext('2d');
 
   var img = new Image();
   // img.src = 'lena30.jpg';
   img.src = 'hair_biyou_kirei_ojiisan.png';
   img.onload = function() {
-    ctx.drawImage(this,0,0,300,200);
+    model_ctx.drawImage(this,0,0,300,200);
   };
 }
 
@@ -124,8 +117,8 @@ async function main() {
   canvasContainer.style = `width: ${videoWidth}px; height: ${videoHeight}px`;
 
   ctx = canvas.getContext('2d');
-  // ctx.translate(canvas.width, 0);
-  // ctx.scale(-1, 1);
+  ctx.translate(canvas.width, 0);
+  ctx.scale(-1, 1);
   ctx.fillStyle = '#32EEDB';
   ctx.strokeStyle = '#32EEDB';
   ctx.lineWidth = 0.5;
@@ -152,7 +145,7 @@ function threejs_renderer(keypoints,isUpdate=false) {
     mesh.geometry.verticesNeedUpdate = true;
     for (let i = 0; i < keypoints.length; i++) {
       let [x,y,z] = keypoints[i];
-      mesh.geometry.vertices[i].set(x,-y,z);
+      mesh.geometry.vertices[i].set(x,y,z);
     }
   } else {
     var texture = new THREE.CanvasTexture(model_canvas);
@@ -161,7 +154,7 @@ function threejs_renderer(keypoints,isUpdate=false) {
     mesh.geometry.vertices = new Array(keypoints.length);
     for (let i = 0; i < keypoints.length; i++) {
       const [x,y,z] = keypoints[i];
-      mesh.geometry.vertices[i] = new THREE.Vector3(x,-y,z);
+      mesh.geometry.vertices[i] = new THREE.Vector3(x,y,z);
     }
 
     mesh.geometry.faces = new Array(TRIANGULATION.length / 3);
@@ -179,7 +172,8 @@ function threejs_renderer(keypoints,isUpdate=false) {
       ];
       mesh.geometry.faceVertexUvs[0][i] = uv;
     }
-    mesh.material = new THREE.MeshBasicMaterial({ map: texture });
+    mesh.material = new THREE.MeshBasicMaterial({ map: texture , 
+                                                  side: THREE.DoubleSide });
   }
 
   threejs_render.render(scene, camera);
@@ -245,8 +239,6 @@ function drawPath(ctx, points, closePath) {
   }
   ctx.stroke(region);
 }
-
-
 </script>
 </body>
 </html>
