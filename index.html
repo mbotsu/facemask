@@ -1,0 +1,252 @@
+<html>
+<head>
+<title>Facemech Test</title>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@2.0.0"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm@2.0.0/dist/tf-backend-wasm.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/facemesh@0.0.3"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.116.1"></script>
+<script src="./triangulation.js"></script>
+<style>
+  .canvas-wrapper { 
+    position: relative;
+    z-index: 1;
+  }
+
+  #model_canvas { 
+    position: static;
+    background: gold;
+    z-index: 2;
+  }
+
+  #face_canvas { 
+    position: static;
+    background: green;
+    z-index: 3;
+  }
+
+  #threejs_canvas { 
+    position: absolute;
+    z-index: 2;
+  }
+
+  #video_block { 
+    position: absolute;
+    background: gold;
+    z-index: 5;
+  }
+
+</style>
+</head>
+<body>
+  
+<div id="main">
+    <div class="container">
+      <div class="canvas-wrapper">
+          <canvas id="model_canvas"></canvas>
+          <!-- <canvas id="face_canvas"></canvas> -->
+      </div>
+      <div id="threejs_canvas"></div>
+      <div class="video_block">
+        <canvas id="output"></canvas>
+        <video id="video" playsinline style="
+          -webkit-transform: scaleX(-1);
+          transform: scaleX(-1);
+          visibility: hidden;
+          width: auto;
+          height: auto;
+          ">
+        </video>
+    </div>
+    </div>
+</div>
+
+<script>
+const videoWidth = 300;
+const videoHeight = 200;
+
+const state = {
+  maxFaces: 1,
+  triangulateMesh: true
+};
+
+let model,model_canvas,video,ctx,canvas;
+
+// Threejs Init
+let width = videoWidth;
+let height = videoHeight;
+let geometry = new THREE.Geometry();
+let scene = new THREE.Scene();
+let threejs_canvas = document.getElementById('threejs_canvas');
+let threejs_render = new THREE.WebGLRenderer({ alpha: true } );
+threejs_render.setPixelRatio(window.devicePixelRatio);
+threejs_render.setSize(width, height);
+threejs_render.setClearColor( 0x000000, 0 );
+threejs_canvas.appendChild(threejs_render.domElement);
+
+let camera = new THREE.PerspectiveCamera(11.3, width / height);
+camera.position.set(150, -100, 1000);
+
+let material = new THREE.MeshBasicMaterial();
+let mesh = new THREE.Mesh(geometry,material);
+scene.add(mesh);
+
+loadImage();
+tf.setBackend('wasm').then(() => main());
+
+function loadImage() {
+
+  model_canvas = document.getElementById('model_canvas');
+
+  model_canvas.width = videoWidth;
+  model_canvas.height = videoHeight;
+  let ctx = model_canvas.getContext('2d');
+
+  var img = new Image();
+  // img.src = 'lena30.jpg';
+  img.src = 'hair_biyou_kirei_ojiisan.png';
+  img.onload = function() {
+    ctx.drawImage(this,0,0,300,200);
+  };
+}
+
+async function main() {
+
+  await setupCamera();
+
+  video.play();
+  video.width = videoWidth;
+  video.height = videoHeight;
+
+  canvas = document.getElementById('output');
+  canvas.width = videoWidth;
+  canvas.height = videoHeight;
+  const canvasContainer = document.querySelector('.canvas-wrapper');
+  canvasContainer.style = `width: ${videoWidth}px; height: ${videoHeight}px`;
+
+  ctx = canvas.getContext('2d');
+  // ctx.translate(canvas.width, 0);
+  // ctx.scale(-1, 1);
+  ctx.fillStyle = '#32EEDB';
+  ctx.strokeStyle = '#32EEDB';
+  ctx.lineWidth = 0.5;
+
+  model = await facemesh.load({maxFaces: state.maxFaces});
+
+  threejsTenderPrediction();
+}
+
+async function threejsTenderPrediction() {
+  const predictions = await model.estimateFaces(model_canvas);
+  if (predictions.length > 0) {
+      predictions.forEach(prediction => {
+          const keypoints = prediction.scaledMesh;
+          threejs_renderer(keypoints);
+          renderPrediction();
+      });
+  }
+}
+
+function threejs_renderer(keypoints,isUpdate=false) {
+  
+  if (isUpdate){
+    mesh.geometry.verticesNeedUpdate = true;
+    for (let i = 0; i < keypoints.length; i++) {
+      let [x,y,z] = keypoints[i];
+      mesh.geometry.vertices[i].set(x,-y,z);
+    }
+  } else {
+    var texture = new THREE.CanvasTexture(model_canvas);
+    texture.flipY = false;
+
+    mesh.geometry.vertices = new Array(keypoints.length);
+    for (let i = 0; i < keypoints.length; i++) {
+      const [x,y,z] = keypoints[i];
+      mesh.geometry.vertices[i] = new THREE.Vector3(x,-y,z);
+    }
+
+    mesh.geometry.faces = new Array(TRIANGULATION.length / 3);
+    for (let i = 0; i < TRIANGULATION.length / 3; i++) {
+
+      let id0 = TRIANGULATION[i*3+0];
+      let id1 = TRIANGULATION[i*3+1];
+      let id2 = TRIANGULATION[i*3+2];
+      mesh.geometry.faces[i] = new THREE.Face3(id0,id1,id2);
+
+      let uv = [
+        new THREE.Vector2(keypoints[id0][0] / videoWidth, keypoints[id0][1] / videoHeight),
+        new THREE.Vector2(keypoints[id1][0] / videoWidth, keypoints[id1][1] / videoHeight),
+        new THREE.Vector2(keypoints[id2][0] / videoWidth, keypoints[id2][1] / videoHeight),
+      ];
+      mesh.geometry.faceVertexUvs[0][i] = uv;
+    }
+    mesh.material = new THREE.MeshBasicMaterial({ map: texture });
+  }
+
+  threejs_render.render(scene, camera);
+}
+
+async function setupCamera() {
+  video = document.getElementById('video');
+
+  const stream = await navigator.mediaDevices.getUserMedia({
+    'audio': false,
+    'video': {
+      facingMode: 'user',
+      // Only setting the video to a specified size in order to accommodate a
+      // point cloud, so on mobile devices accept the default size.
+      width: videoWidth,
+      height: videoHeight
+    },
+  });
+  video.srcObject = stream;
+
+  return new Promise((resolve) => {
+    video.onloadedmetadata = () => {
+      resolve(video);
+    };
+  });
+}
+
+async function renderPrediction() {
+
+  const predictions = await model.estimateFaces(video);
+  ctx.drawImage(
+      video, 0, 0, videoWidth, videoHeight, 0, 0, canvas.width, canvas.height);
+
+  if (predictions.length > 0) {
+    predictions.forEach(prediction => {
+      const keypoints = prediction.scaledMesh;
+
+      if (state.triangulateMesh) {
+        for (let i = 0; i < TRIANGULATION.length / 3; i++) {
+          const points = [
+            TRIANGULATION[i * 3], TRIANGULATION[i * 3 + 1],
+            TRIANGULATION[i * 3 + 2]
+          ].map(index => keypoints[index]);
+          drawPath(ctx, points, true);
+        }
+      }
+      threejs_renderer(keypoints,true);
+    });
+  }
+  requestAnimationFrame(renderPrediction);
+}
+
+function drawPath(ctx, points, closePath) {
+  const region = new Path2D();
+  region.moveTo(points[0][0], points[0][1]);
+  for (let i = 1; i < points.length; i++) {
+    const point = points[i];
+    region.lineTo(point[0], point[1]);
+  }
+
+  if (closePath) {
+    region.closePath();
+  }
+  ctx.stroke(region);
+}
+
+
+</script>
+</body>
+</html>
