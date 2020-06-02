@@ -85,10 +85,9 @@ const mesh = new THREE.Mesh(geometry,material);
 mesh.rotation.set(Math.PI,Math.PI,0);
 scene.add(mesh);
 
-loadImage();
 tf.setBackend('wasm').then(() => main());
 
-function loadImage() {
+async function setupModelCanvas() {
 
   model_canvas = document.getElementById('model_canvas');
   model_canvas.width = modelWidth;
@@ -96,16 +95,26 @@ function loadImage() {
 
   let model_ctx = model_canvas.getContext('2d');
 
-  let img = new Image();
-  // img.src = 'lena30.jpg';
-  img.src = 'hair_biyou_kirei_ojiisan.png';
-  img.onload = function() {
-    model_ctx.drawImage(this,0,0,modelWidth,modelHeight);
-  };
+  // let src = 'lena30.jpg';
+  let src = 'hair_biyou_kirei_ojiisan.png';
+  const img = await loadImage(src).catch(e => {
+    console.log('onload error', e);
+  });
+  model_ctx.drawImage(img,0,0,modelWidth,modelHeight);
+}
+
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = (e) => reject(e);
+    img.src = src;
+  });
 }
 
 async function main() {
 
+  await setupModelCanvas();
   await setupCamera();
   video.play();
 
@@ -134,7 +143,8 @@ async function main() {
 
   model = await facemesh.load({maxFaces: state.maxFaces});
 
-  threejsRenderPrediction().then(() => renderPrediction());
+  await threejsRenderPrediction();
+  renderPrediction();
   
 }
 
