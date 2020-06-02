@@ -7,6 +7,10 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.116.1"></script>
 <script src="./triangulation.js"></script>
 <style>
+  body {
+    margin: 0;
+    overflow: hidden;
+  }
   .canvas-wrapper { 
     position: relative;
     z-index: 1;
@@ -20,13 +24,13 @@
 
   #threejs_canvas { 
     position: absolute;
-    z-index: 2;
+    z-index: 3;
   }
 
-  #video_block { 
+  .video_block { 
     position: absolute;
-    background: gold;
-    z-index: 5;
+    /* background: gold; */
+    z-index: 2;
   }
 
 </style>
@@ -205,7 +209,7 @@ async function renderPrediction() {
 
   const predictions = await model.estimateFaces(video);
   ctx.drawImage(
-      video, 0, 0, videoWidth, videoHeight, 0, 0, canvas.width, canvas.height);
+      video, 0, 0, video.videoWidth, video.videoHeight, 0, 0, canvas.width, canvas.height);
 
   if (predictions.length > 0) {
     predictions.forEach(prediction => {
