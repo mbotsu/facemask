@@ -29,7 +29,7 @@
 
   .video_block { 
     position: absolute;
-    /* background: gold; */
+    /* background: green; */
     z-index: 2;
   }
 
@@ -60,6 +60,8 @@
 <script>
 const videoWidth = 300;
 const videoHeight = 200;
+const modelWidth = 300;
+const modelHeight = 200;
 
 const state = {
   maxFaces: 1,
@@ -80,8 +82,14 @@ threejs_render.setSize(width, height);
 threejs_render.setClearColor( 0x000000, 0 );
 threejs_canvas.appendChild(threejs_render.domElement);
 
-let camera = new THREE.PerspectiveCamera(11, width / height);
-camera.position.set(-150, -100, 1000);
+const fov    = 20;
+const fovRad = (fov / 2) * (Math.PI / 180);
+const dist   = (height / 2) / Math.tan(fovRad);
+
+let camera = new THREE.PerspectiveCamera(fov, width/ height, 1, dist * 2);
+camera.position.z = dist;
+camera.position.x = width/2 * -1;
+camera.position.y = height/2 * -1;
 
 let material = new THREE.MeshBasicMaterial();
 let mesh = new THREE.Mesh(geometry,material);
@@ -94,8 +102,9 @@ tf.setBackend('wasm').then(() => main());
 function loadImage() {
 
   model_canvas = document.getElementById('model_canvas');
-  model_canvas.width = videoWidth;
-  model_canvas.height = videoHeight;
+  model_canvas.width = modelWidth;
+  model_canvas.height = modelHeight;
+
   let model_ctx = model_canvas.getContext('2d');
 
   var img = new Image();
@@ -170,9 +179,9 @@ function threejs_renderer(keypoints,isUpdate=false) {
       mesh.geometry.faces[i] = new THREE.Face3(id0,id1,id2);
 
       let uv = [
-        new THREE.Vector2(keypoints[id0][0] / videoWidth, keypoints[id0][1] / videoHeight),
-        new THREE.Vector2(keypoints[id1][0] / videoWidth, keypoints[id1][1] / videoHeight),
-        new THREE.Vector2(keypoints[id2][0] / videoWidth, keypoints[id2][1] / videoHeight),
+        new THREE.Vector2(keypoints[id0][0] / modelWidth, keypoints[id0][1] / modelHeight),
+        new THREE.Vector2(keypoints[id1][0] / modelWidth, keypoints[id1][1] / modelHeight),
+        new THREE.Vector2(keypoints[id2][0] / modelWidth, keypoints[id2][1] / modelHeight),
       ];
       mesh.geometry.faceVertexUvs[0][i] = uv;
     }
