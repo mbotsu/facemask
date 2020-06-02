@@ -68,7 +68,7 @@ const state = {
   triangulateMesh: true
 };
 
-let model,model_canvas,video,ctx,canvas;
+let model,model_canvas,video,ctx,canvas,camera;
 
 // Threejs Init
 let width = videoWidth;
@@ -81,15 +81,6 @@ threejs_render.setPixelRatio(window.devicePixelRatio);
 threejs_render.setSize(width, height);
 threejs_render.setClearColor( 0x000000, 0 );
 threejs_canvas.appendChild(threejs_render.domElement);
-
-const fov    = 20;
-const fovRad = (fov / 2) * (Math.PI / 180);
-const dist   = (height / 2) / Math.tan(fovRad);
-
-let camera = new THREE.PerspectiveCamera(fov, width/ height, 1, dist * 2);
-camera.position.z = dist;
-camera.position.x = width/2 * -1;
-camera.position.y = height/2 * -1;
 
 let material = new THREE.MeshBasicMaterial();
 let mesh = new THREE.Mesh(geometry,material);
@@ -120,8 +111,15 @@ async function main() {
   await setupCamera();
 
   video.play();
-  video.width = videoWidth;
-  video.height = videoHeight;
+
+  const fov    = 20;
+  const fovRad = (fov / 2) * (Math.PI / 180);
+  const dist   = (video.videoHeight / 2) / Math.tan(fovRad);
+
+  camera = new THREE.PerspectiveCamera(fov, video.videoWidth/ video.videoHeight, 1, dist * 2);
+  camera.position.z = dist;
+  camera.position.x = video.videoWidth/2 * -1;
+  camera.position.y = video.videoHeight/2 * -1;
 
   canvas = document.getElementById('output');
   canvas.width = videoWidth;
@@ -224,15 +222,15 @@ async function renderPrediction() {
     predictions.forEach(prediction => {
       const keypoints = prediction.scaledMesh;
 
-      if (state.triangulateMesh) {
-        for (let i = 0; i < TRIANGULATION.length / 3; i++) {
-          const points = [
-            TRIANGULATION[i * 3], TRIANGULATION[i * 3 + 1],
-            TRIANGULATION[i * 3 + 2]
-          ].map(index => keypoints[index]);
-          drawPath(ctx, points, true);
-        }
-      }
+      // if (state.triangulateMesh) {
+      //   for (let i = 0; i < TRIANGULATION.length / 3; i++) {
+      //     const points = [
+      //       TRIANGULATION[i * 3], TRIANGULATION[i * 3 + 1],
+      //       TRIANGULATION[i * 3 + 2]
+      //     ].map(index => keypoints[index]);
+      //     drawPath(ctx, points, true);
+      //   }
+      // }
       threejs_renderer(keypoints,true);
     });
   }
