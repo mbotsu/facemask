@@ -60,8 +60,8 @@
 <script>
 const videoWidth = 300;
 const videoHeight = 200;
-const modelWidth = 300;
-const modelHeight = 200;
+const modelWidth = 256;
+const modelHeight = 128;
 
 const state = {
   maxFaces: 1,
@@ -71,7 +71,7 @@ const state = {
 let model,model_canvas,video,ctx,canvas,camera;
 
 // Threejs Init
-const geometry = new THREE.Geometry();
+const geometry = THREE.BufferGeometry();
 const scene = new THREE.Scene();
 const threejs_canvas = document.getElementById('threejs_canvas');
 const threejs_render = new THREE.WebGLRenderer({ alpha: true } );
@@ -162,40 +162,32 @@ function threejsCreateMesh(keypoints) {
   
   let texture = new THREE.CanvasTexture(model_canvas);
   texture.flipY = false;
+  
+  mesh.geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(3 * TRIANGULATION.length), 3));
+  mesh.geometry.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(2 * TRIANGULATION.length), 2));
+  
+  let pos = mesh.geometry.attributes.position.array;
+  TRIANGULATION.forEach((index,i) => 
+    [pos[i*3],pos[i*3+1],pos[i*3+2]] = keypoints[index]);
 
-  mesh.geometry.vertices = new Array(keypoints.length);
-  for (let i = 0; i < keypoints.length; i++) {
-    const [x,y,z] = keypoints[i];
-    mesh.geometry.vertices[i] = new THREE.Vector3(x,y,z);
-  }
+  let uv = mesh.geometry.attributes.uv.array;
+  TRIANGULATION.forEach((index,i) => 
+    [uv[i*2],uv[i*2+1]] 
+      = [keypoints[index][0] / modelWidth, keypoints[index][1] / modelHeight]
+  );
 
-  mesh.geometry.faces = new Array(TRIANGULATION.length / 3);
-  for (let i = 0; i < TRIANGULATION.length / 3; i++) {
-
-    let id0 = TRIANGULATION[i*3+0];
-    let id1 = TRIANGULATION[i*3+1];
-    let id2 = TRIANGULATION[i*3+2];
-    mesh.geometry.faces[i] = new THREE.Face3(id0,id1,id2);
-
-    let uv = [
-      new THREE.Vector2(keypoints[id0][0] / modelWidth, keypoints[id0][1] / modelHeight),
-      new THREE.Vector2(keypoints[id1][0] / modelWidth, keypoints[id1][1] / modelHeight),
-      new THREE.Vector2(keypoints[id2][0] / modelWidth, keypoints[id2][1] / modelHeight),
-    ];
-    mesh.geometry.faceVertexUvs[0][i] = uv;
-  }
   mesh.material = new THREE.MeshBasicMaterial({ map: texture , 
                                                 side: THREE.DoubleSide });
-
   threejs_render.render(scene, camera);
 }
 
 function threejsUpdateMesh(keypoints) {
-  mesh.geometry.verticesNeedUpdate = true;
-  for (let i = 0; i < keypoints.length; i++) {
-    let [x,y,z] = keypoints[i];
-    mesh.geometry.vertices[i].set(x,y,z);
-  }
+  mesh.geometry.attributes.position.needsUpdate = true;
+  let pos = mesh.geometry.attributes.position.array;
+  
+  TRIANGULATION.forEach((index,i) => 
+    [pos[i*3],pos[i*3+1],pos[i*3+2]] = keypoints[index]);
+  
   threejs_render.render(scene, camera);
 }
 
