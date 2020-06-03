@@ -163,18 +163,16 @@ function threejsCreateMesh(keypoints) {
   let texture = new THREE.CanvasTexture(model_canvas);
   texture.flipY = false;
   
-  mesh.geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(3 * TRIANGULATION.length), 3));
-  mesh.geometry.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(2 * TRIANGULATION.length), 2));
-  
-  let pos = mesh.geometry.attributes.position.array;
-  TRIANGULATION.forEach((index,i) => 
-    [pos[i*3],pos[i*3+1],pos[i*3+2]] = keypoints[index]);
+  let pos = new Float32Array(
+    Array.prototype.concat.apply([],TRIANGULATION.map(index => keypoints[index])));
 
-  let uv = mesh.geometry.attributes.uv.array;
-  TRIANGULATION.forEach((index,i) => 
-    [uv[i*2],uv[i*2+1]] 
-      = [keypoints[index][0] / modelWidth, keypoints[index][1] / modelHeight]
-  );
+  let uv = new Float32Array(
+    Array.prototype.concat.apply([],
+      TRIANGULATION.map(index => 
+        [keypoints[index][0] / modelWidth, keypoints[index][1] / modelHeight])));
+
+  mesh.geometry.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  mesh.geometry.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
 
   mesh.material = new THREE.MeshBasicMaterial({ map: texture , 
                                                 side: THREE.DoubleSide });
@@ -182,11 +180,9 @@ function threejsCreateMesh(keypoints) {
 }
 
 function threejsUpdateMesh(keypoints) {
-  mesh.geometry.attributes.position.needsUpdate = true;
-  let pos = mesh.geometry.attributes.position.array;
-  
-  TRIANGULATION.forEach((index,i) => 
-    [pos[i*3],pos[i*3+1],pos[i*3+2]] = keypoints[index]);
+  mesh.geometry.attributes.position.needsUpdate = true;  
+  mesh.geometry.attributes.position.array = new Float32Array(
+    Array.prototype.concat.apply([],TRIANGULATION.map(index => keypoints[index])));
   
   threejs_render.render(scene, camera);
 }
