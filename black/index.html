@@ -1,0 +1,253 @@
+<html>
+<head>
+<title>Facemask (tfjs + facemesh)</title>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@2.0.0"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm@2.0.0/dist/tf-backend-wasm.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/facemesh@0.0.3"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.116.1"></script>
+<script src="../triangulation.js"></script>
+<script src="../uv_coords.js"></script>
+
+<style>
+  body {
+    margin: 0;
+    overflow: hidden;
+  }
+  .canvas-wrapper { 
+    position: relative;
+    z-index: 1;
+  }
+
+  #model_canvas { 
+    position: static;
+    background: white;
+    z-index: 2;
+  }
+
+  #threejs_canvas { 
+    position: absolute;
+    z-index: 3;
+  }
+
+  .video_block { 
+    position: absolute;
+    /* background: green; */
+    z-index: 2;
+  }
+
+</style>
+</head>
+<body>
+  
+<div id="main">
+    <div class="container">
+      <div class="canvas-wrapper">
+          <canvas id="model_canvas"></canvas>
+      </div>
+      <div id="threejs_canvas"></div>
+      <div class="video_block">
+        <canvas id="output"></canvas>
+        <video id="video" playsinline style="
+          -webkit-transform: scaleX(-1);
+          transform: scaleX(-1);
+          visibility: hidden;
+          width: auto;
+          height: auto;
+          ">
+        </video>
+    </div>
+    </div>
+</div>
+
+<script>
+const videoWidth = 300;
+const videoHeight = 200;
+const modelWidth = 256;
+const modelHeight = 128;
+
+const state = {
+  maxFaces: 1,
+  triangulateMesh: true
+};
+
+let model,model_canvas,model_ctx,video,ctx,canvas,camera;
+
+// Threejs Init
+const geometry = THREE.BufferGeometry();
+const scene = new THREE.Scene();
+const threejs_canvas = document.getElementById('threejs_canvas');
+const threejs_render = new THREE.WebGLRenderer({ alpha: true } );
+threejs_render.setPixelRatio(window.devicePixelRatio);
+threejs_render.setSize(videoWidth, videoHeight);
+threejs_render.setClearColor( 0x000000, 0 );
+threejs_canvas.appendChild(threejs_render.domElement);
+
+const material = new THREE.MeshBasicMaterial();
+const mesh = new THREE.Mesh(geometry,material);
+mesh.rotation.set(Math.PI,Math.PI,0);
+scene.add(mesh);
+
+tf.setBackend('wasm').then(() => main());
+
+async function setupModelCanvas() {
+
+  model_canvas = document.getElementById('model_canvas');
+  model_canvas.width = modelWidth;
+  model_canvas.height = modelHeight;
+  
+  model_ctx = model_canvas.getContext('2d');
+  // model_ctx.translate(model_canvas.width, 0);
+  // model_ctx.scale(-1, 1);
+  model_ctx.fillStyle = '#32EEDB';
+  model_ctx.strokeStyle = '#32EEDB';
+  model_ctx.lineWidth = 0.5;
+
+  let src = 'black.png';
+  const img = await loadImage(src).catch(e => {
+    console.log('onload error', e);
+  });
+  model_ctx.drawImage(img,0,0,modelWidth,modelHeight);
+}
+
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = (e) => reject(e);
+    img.src = src;
+  });
+}
+
+async function main() {
+
+  await setupModelCanvas();
+  await setupCamera();
+  video.play();
+
+  // threejs camera create
+  const fov    = 1;
+  const fovRad = (fov / 2) * (Math.PI / 180);
+  const dist   = (video.videoHeight / 2) / Math.tan(fovRad);
+
+  camera = new THREE.PerspectiveCamera(fov, video.videoWidth/ video.videoHeight, 1, dist * 2);
+  camera.position.z = dist;
+  camera.position.x = video.videoWidth/2 * -1;
+  camera.position.y = video.videoHeight/2 * -1;
+
+  canvas = document.getElementById('output');
+  canvas.width = videoWidth;
+  canvas.height = videoHeight;
+  const canvasContainer = document.querySelector('.video_block');
+  canvasContainer.style = `width: ${videoWidth}px; height: ${videoHeight}px`;
+
+  ctx = canvas.getContext('2d');
+  ctx.translate(canvas.width, 0);
+  ctx.scale(-1, 1);
+  ctx.fillStyle = '#32EEDB';
+  ctx.strokeStyle = '#32EEDB';
+  ctx.lineWidth = 0.5;
+
+  model = await facemesh.load({maxFaces: state.maxFaces});
+
+  await threejsRenderPrediction();
+  renderPrediction();
+}
+
+async function threejsRenderPrediction() {
+  threejsCreateMesh(UV_COORDS);
+}
+
+function threejsCreateMesh(keypoints) {
+  
+  let texture = new THREE.CanvasTexture(model_canvas);
+  texture.flipY = false;
+  
+  let pos = new Float32Array(
+    Array.prototype.concat.apply([],TRIANGULATION.map(function(index){
+      let [x , y] = keypoints[index];
+      return [x ,y, 0];
+    })));
+
+  let uv = new Float32Array(
+    Array.prototype.concat.apply([],
+      TRIANGULATION.map(index => 
+        [keypoints[index][0], keypoints[index][1]])));
+
+  // console.log(uv);
+  mesh.geometry.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  mesh.geometry.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+
+  mesh.material = new THREE.MeshBasicMaterial({ map: texture , 
+                                                side: THREE.DoubleSide });
+  threejs_render.render(scene, camera);
+
+  // for (let i = 0; i < TRIANGULATION.length / 3; i++) {
+  //   const points = [
+  //     TRIANGULATION[i * 3], TRIANGULATION[i * 3 + 1],
+  //     TRIANGULATION[i * 3 + 2]
+  //   ].map(index => UV_COORDS[index]);
+  //   drawPath(model_ctx, points, true);
+  // }
+}
+
+function threejsUpdateMesh(keypoints) {
+  mesh.geometry.attributes.position.needsUpdate = true;  
+  mesh.geometry.attributes.position.array = new Float32Array(
+    Array.prototype.concat.apply([],TRIANGULATION.map(index => keypoints[index])));
+  
+  threejs_render.render(scene, camera);
+}
+
+async function setupCamera() {
+  video = document.getElementById('video');
+
+  const stream = await navigator.mediaDevices.getUserMedia({
+    'audio': false,
+    'video': {
+      facingMode: 'user',
+      // Only setting the video to a specified size in order to accommodate a
+      // point cloud, so on mobile devices accept the default size.
+      width: videoWidth,
+      height: videoHeight
+    },
+  });
+  video.srcObject = stream;
+
+  return new Promise((resolve) => {
+    video.onloadedmetadata = () => {
+      resolve(video);
+    };
+  });
+}
+
+async function renderPrediction() {
+
+  const predictions = await model.estimateFaces(video);
+  ctx.drawImage(
+      video, 0, 0, video.videoWidth, video.videoHeight, 0, 0, canvas.width, canvas.height);
+
+  if (predictions.length > 0) {
+    predictions.forEach(prediction => {
+      const keypoints = prediction.scaledMesh;
+      threejsUpdateMesh(keypoints);
+    });
+  }
+  requestAnimationFrame(renderPrediction);
+}
+
+function drawPath(ctx, points, closePath) {
+  const region = new Path2D();
+  region.moveTo(points[0][0] * modelWidth, points[0][1] * modelHeight);
+  for (let i = 1; i < points.length; i++) {
+    const point = points[i];
+    region.lineTo(point[0] * modelWidth, point[1] * modelHeight);
+  }
+
+  if (closePath) {
+    region.closePath();
+  }
+  ctx.stroke(region);
+}
+</script>
+</body>
+</html>
